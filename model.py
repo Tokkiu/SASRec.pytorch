@@ -166,7 +166,7 @@ class SASRec(torch.nn.Module):
 
         return pos_logits, neg_logits, pos_logits_f # pos_pred, neg_pred
 
-    def predict(self, user_ids, log_seqs, item_indices, fea_indices): # for inference
+    def predict(self, user_ids, log_seqs, log_seqs_f, item_indices, fea_indices): # for inference
         log_feats = self.log2feats(log_seqs) # user_ids hasn't been used yet
         log_feats_f = self.log2feats_f(log_seqs_f) # user_ids hasn't been used yet
 
