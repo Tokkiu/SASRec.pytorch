@@ -156,7 +156,7 @@ class SASRec(torch.nn.Module):
         log_feats_f = self.log2feats_f(log_seqs_f) # user_ids hasn't been used yet
 
         pos_embs = self.item_emb(torch.LongTensor(pos_seqs).to(self.dev))
-        pos_embs_f = self.item_emb(torch.LongTensor(pos_seqs_f).to(self.dev))
+        pos_embs_f = self.fea_emb(torch.LongTensor(pos_seqs_f).to(self.dev))
         neg_embs = self.item_emb(torch.LongTensor(neg_seqs).to(self.dev))
 
         pos_logits = (log_feats * pos_embs).sum(dim=-1)
