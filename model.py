@@ -177,7 +177,7 @@ class SASRec(torch.nn.Module):
         fea_embs = self.fea_emb(torch.LongTensor(fea_indices).to(self.dev)) # (U, I, C)
 
         logits = item_embs.matmul(final_feat.unsqueeze(-1)).squeeze(-1)
-        logits_f = fea_embs.matmul(final_feat.unsqueeze(-1)).squeeze(-1)
+        logits_f = fea_embs.matmul(final_feat_f.unsqueeze(-1)).squeeze(-1)
 
         # preds = self.pos_sigmoid(logits) # rank same item list for different users
 
