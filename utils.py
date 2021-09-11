@@ -25,22 +25,27 @@ def sample_function(user_train, fea_train, usernum, itemnum, feanum, batch_size,
         seq = np.zeros([maxlen], dtype=np.int32)
         fseq = np.zeros([maxlen], dtype=np.int32)
         pos = np.zeros([maxlen], dtype=np.int32)
+        pos_f = np.zeros([maxlen], dtype=np.int32)
         neg = np.zeros([maxlen], dtype=np.int32)
         nxt = user_train[user][-1]
+        nxt_f = fea_train[user][-1]
         idx = maxlen - 1
 
         ts = set(user_train[user])
         feas = list(reversed(fea_train[user][:-1]))
+
         for ii, i in enumerate(reversed(user_train[user][:-1])):
             seq[idx] = i
             fseq[idx] = feas[ii]
             pos[idx] = nxt
+            pos_f[idx] = nxt_f
             if nxt != 0: neg[idx] = random_neq(1, itemnum + 1, ts)
             nxt = i
+            nxt_f = feas[ii]
             idx -= 1
             if idx == -1: break
 
-        return (user, seq, fseq, pos, neg)
+        return (user, seq, fseq, pos, neg, pos_f)
 
     np.random.seed(SEED)
     while True:

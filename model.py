@@ -37,6 +37,7 @@ class SASRec(torch.nn.Module):
         self.item_emb = torch.nn.Embedding(self.item_num+1, args.hidden_units, padding_idx=0)
         self.fea_emb = torch.nn.Embedding(self.fea_num+1, args.hidden_units, padding_idx=0)
         self.pos_emb = torch.nn.Embedding(args.maxlen, args.hidden_units) # TO IMPROVE
+        self.pos_emb_f = torch.nn.Embedding(args.maxlen, args.hidden_units) # TO IMPROVE
         self.emb_dropout = torch.nn.Dropout(p=args.dropout_rate)
 
         self.attention_layernorms = torch.nn.ModuleList() # to be Q for self-attention
@@ -123,7 +124,7 @@ class SASRec(torch.nn.Module):
         seqs *= self.fea_emb.embedding_dim ** 0.5
         positions = np.tile(np.array(range(log_seqs.shape[1])), [log_seqs.shape[0], 1])
         # todo fea position
-        seqs += self.pos_emb(torch.LongTensor(positions).to(self.dev))
+        seqs += self.pos_emb_f(torch.LongTensor(positions).to(self.dev))
         seqs = self.emb_dropout(seqs)
 
         timeline_mask = torch.BoolTensor(log_seqs == 0).to(self.dev)
@@ -150,15 +151,16 @@ class SASRec(torch.nn.Module):
 
         return log_feats
 
-    def forward(self, user_ids, log_seqs, log_seqs_f, pos_seqs, neg_seqs): # for training
+    def forward(self, user_ids, log_seqs, log_seqs_f, pos_seqs, neg_seqs, pos_seqs_f): # for training
         log_feats = self.log2feats(log_seqs) # user_ids hasn't been used yet
         log_feats_f = self.log2feats_f(log_seqs_f) # user_ids hasn't been used yet
 
         pos_embs = self.item_emb(torch.LongTensor(pos_seqs).to(self.dev))
+        pos_embs_f = self.item_emb(torch.LongTensor(pos_seqs_f).to(self.dev))
         neg_embs = self.item_emb(torch.LongTensor(neg_seqs).to(self.dev))
 
         pos_logits = (log_feats * pos_embs).sum(dim=-1)
-        pos_logits_f = (log_feats_f * pos_embs).sum(dim=-1)
+        pos_logits_f = (log_feats_f * pos_embs_f).sum(dim=-1)
         neg_logits = (log_feats * neg_embs).sum(dim=-1)
 
         # pos_pred = self.pos_sigmoid(pos_logits)
