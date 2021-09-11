@@ -160,7 +160,7 @@ def evaluate(model, dataset, args):
         seq[idx] = valid[u][0]
         seq_f[idx] = fea_valid[u][0]
         idx -= 1
-        fea_r = reversed(fea_train[u])
+        fea_r = list(reversed(fea_train[u]))
         for ii, i in enumerate(reversed(train[u])):
             seq[idx] = i
             seq_f[idx] = fea_r[ii]
