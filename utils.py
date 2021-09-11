@@ -94,12 +94,16 @@ def id2fea(dataset):
 
 
     user_train, user_valid, user_test, _, _ = dataset
+    res = []
     for data in [user_train, user_valid, user_test]:
         ndata = copy.deepcopy(data)
         for ui, seq in ndata.items():
             for ii, item in enumerate(seq):
                 ndata[ui][ii] = ndic[item]
-    return user_train, user_valid, user_test, len(dic), ndic
+        res.append(ndata)
+    res.append(len(dic))
+    res.append(ndic)
+    return res
 
 
 
