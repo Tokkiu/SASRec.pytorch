@@ -99,7 +99,7 @@ def id2fea(dataset):
         for ui, seq in ndata.items():
             for ii, item in enumerate(seq):
                 ndata[ui][ii] = ndic[item]
-    return user_train, user_valid, user_test, len(fdic)
+    return user_train, user_valid, user_test, len(dic), ndic
 
 
 
@@ -140,7 +140,7 @@ def data_partition(fname):
 # evaluate on test set
 def evaluate(model, dataset, args):
     [train, valid, test, usernum, itemnum] = copy.deepcopy(dataset)
-    fea_train, fea_valid, fea_test, fea_num = id2fea(dataset)
+    fea_train, fea_valid, fea_test, fea_num, f_dic = id2fea(dataset)
 
     NDCG = 0.0
     HT = 0.0
@@ -155,12 +155,15 @@ def evaluate(model, dataset, args):
         if len(train[u]) < 1 or len(test[u]) < 1: continue
 
         seq = np.zeros([args.maxlen], dtype=np.int32)
-        seq_f = np.zeros([args.maxlen], dtype=np.int32)
         idx = args.maxlen - 1
         seq[idx] = valid[u][0]
+
+        seq_f = np.zeros([args.maxlen], dtype=np.int32)
         seq_f[idx] = fea_valid[u][0]
-        idx -= 1
         fea_r = list(reversed(fea_train[u]))
+
+
+        idx -= 1
         for ii, i in enumerate(reversed(train[u])):
             seq[idx] = i
             seq_f[idx] = fea_r[ii]
@@ -174,9 +177,7 @@ def evaluate(model, dataset, args):
             t = np.random.randint(1, itemnum + 1)
             while t in rated: t = np.random.randint(1, itemnum + 1)
             item_idx.append(t)
-        for n in range(fea_num):
-            if n != fea_idx[0]:
-                fea_idx.append(n)
+            fea_idx.append(f_dic[t])
 
         predictions = -model.predict(*[np.array(l) for l in [[u], [seq], [seq_f], item_idx, fea_idx]])
         predictions = predictions[0] # - for 1st argsort DESC

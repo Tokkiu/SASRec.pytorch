@@ -36,7 +36,7 @@ if __name__ == '__main__':
 
     dataset = data_partition(args.dataset)
     [user_train, user_valid, user_test, usernum, itemnum] = dataset
-    fea_train, fea_valid, fea_test, feanum = id2fea(dataset)
+    fea_train, fea_valid, fea_test, feanum, _ = id2fea(dataset)
     num_batch = len(user_train) // args.batch_size # tail? + ((len(user_train) % args.batch_size) != 0)
     cc = 0.0
     for u in user_train:
