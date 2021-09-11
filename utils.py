@@ -5,6 +5,8 @@ import random
 import numpy as np
 from collections import defaultdict
 from multiprocessing import Process, Queue
+import pandas as pd
+from collections import defaultdict
 
 # sampler for batch generation
 def random_neq(l, r, s):
@@ -14,28 +16,31 @@ def random_neq(l, r, s):
     return t
 
 
-def sample_function(user_train, usernum, itemnum, batch_size, maxlen, result_queue, SEED):
+def sample_function(user_train, fea_train, usernum, itemnum, feanum, batch_size, maxlen, result_queue, SEED):
     def sample():
 
         user = np.random.randint(1, usernum + 1)
         while len(user_train[user]) <= 1: user = np.random.randint(1, usernum + 1)
 
         seq = np.zeros([maxlen], dtype=np.int32)
+        fseq = np.zeros([maxlen], dtype=np.int32)
         pos = np.zeros([maxlen], dtype=np.int32)
         neg = np.zeros([maxlen], dtype=np.int32)
         nxt = user_train[user][-1]
         idx = maxlen - 1
 
         ts = set(user_train[user])
-        for i in reversed(user_train[user][:-1]):
+        feas = list(reversed(fea_train[user][:-1]))
+        for ii, i in enumerate(reversed(user_train[user][:-1])):
             seq[idx] = i
+            fseq[idx] = feas[ii]
             pos[idx] = nxt
             if nxt != 0: neg[idx] = random_neq(1, itemnum + 1, ts)
             nxt = i
             idx -= 1
             if idx == -1: break
 
-        return (user, seq, pos, neg)
+        return (user, seq, fseq, pos, neg)
 
     np.random.seed(SEED)
     while True:
@@ -47,14 +52,16 @@ def sample_function(user_train, usernum, itemnum, batch_size, maxlen, result_que
 
 
 class WarpSampler(object):
-    def __init__(self, User, usernum, itemnum, batch_size=64, maxlen=10, n_workers=1):
+    def __init__(self, User, Fea, usernum, itemnum, feanum, batch_size=64, maxlen=10, n_workers=1):
         self.result_queue = Queue(maxsize=n_workers * 10)
         self.processors = []
         for i in range(n_workers):
             self.processors.append(
                 Process(target=sample_function, args=(User,
+                                                      Fea,
                                                       usernum,
                                                       itemnum,
+                                                      feanum,
                                                       batch_size,
                                                       maxlen,
                                                       self.result_queue,
@@ -70,6 +77,31 @@ class WarpSampler(object):
         for p in self.processors:
             p.terminate()
             p.join()
+
+def id2fea(dataset):
+    mv = pd.read_csv('./ml-latest/movies.csv')
+    mv['genres'] = mv['genres'].str.split('|').str.slice(0, 1).apply(lambda x: ''.join(map(str, x))).str.replace(
+        '\(no genres listed\)', 'Pad')
+    gs = list(set(mv['genres']))
+    gs.remove('Pad')
+    gs.insert(0, 'Pad')
+    dic = dict([[d, i] for i, d in enumerate(gs)])
+    mv['fea'] = mv['genres'].apply(lambda x: dic[x])
+    fdic = dict(zip(mv['movieId'], mv['fea']))
+    ndic = defaultdict(int)
+    for k, v in fdic.items():
+        ndic[k] = v
+
+
+    user_train, user_valid, user_test, _, _ = dataset
+    for data in [user_train, user_valid, user_test]:
+        ndata = copy.deepcopy(data)
+        for ui, seq in ndata.items():
+            for ii, item in enumerate(seq):
+                ndata[ui][ii] = ndic[item]
+    return user_train, user_valid, user_test, len(fdic)
+
+
 
 
 # train/val/test data generation
@@ -108,6 +140,8 @@ def data_partition(fname):
 # evaluate on test set
 def evaluate(model, dataset, args):
     [train, valid, test, usernum, itemnum] = copy.deepcopy(dataset)
+    fea_train, fea_valid, fea_test, fea_num = id2fea(dataset, ndic)
+
 
     NDCG = 0.0
     HT = 0.0
@@ -132,12 +166,16 @@ def evaluate(model, dataset, args):
         rated = set(train[u])
         rated.add(0)
         item_idx = [test[u][0]]
+        fea_idx = [fea_test[u][0]]
         for _ in range(100):
             t = np.random.randint(1, itemnum + 1)
             while t in rated: t = np.random.randint(1, itemnum + 1)
             item_idx.append(t)
+        for n in range(fea_num):
+            if n != fea_idx[0]:
+                fea_idx.append(n)
 
-        predictions = -model.predict(*[np.array(l) for l in [[u], [seq], item_idx]])
+        predictions = -model.predict(*[np.array(l) for l in [[u], [seq], item_idx, fea_idx]])
         predictions = predictions[0] # - for 1st argsort DESC
 
         rank = predictions.argsort().argsort()[0].item()

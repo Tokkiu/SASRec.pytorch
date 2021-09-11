@@ -2,11 +2,9 @@ import os
 import time
 import torch
 import argparse
-
 from model import SASRec
 from tqdm import tqdm
 from utils import *
-
 def str2bool(s):
     if s not in {'false', 'true'}:
         raise ValueError('Not a valid boolean string')
@@ -38,6 +36,7 @@ if __name__ == '__main__':
 
     dataset = data_partition(args.dataset)
     [user_train, user_valid, user_test, usernum, itemnum] = dataset
+    fea_train, fea_valid, fea_test, feanum = id2fea(dataset)
     num_batch = len(user_train) // args.batch_size # tail? + ((len(user_train) % args.batch_size) != 0)
     cc = 0.0
     for u in user_train:
@@ -46,8 +45,8 @@ if __name__ == '__main__':
 
     f = open(os.path.join(args.dataset + '_' + args.train_dir, 'log.txt'), 'w')
 
-    sampler = WarpSampler(user_train, usernum, itemnum, batch_size=args.batch_size, maxlen=args.maxlen, n_workers=3)
-    model = SASRec(usernum, itemnum, args).to(args.device) # no ReLU activation in original SASRec implementation?
+    sampler = WarpSampler(user_train, fea_train, usernum, itemnum, feanum, batch_size=args.batch_size, maxlen=args.maxlen, n_workers=3)
+    model = SASRec(usernum, itemnum, feanum, args).to(args.device) # no ReLU activation in original SASRec implementation?
 
     for name, param in model.named_parameters():
         try:
@@ -89,14 +88,15 @@ if __name__ == '__main__':
     for epoch in range(epoch_start_idx, args.num_epochs + 1):
         if args.inference_only: break # just to decrease identition
         for step in range(num_batch): # tqdm(range(num_batch), total=num_batch, ncols=70, leave=False, unit='b'):
-            u, seq, pos, neg = sampler.next_batch() # tuples to ndarray
-            u, seq, pos, neg = np.array(u), np.array(seq), np.array(pos), np.array(neg)
-            pos_logits, neg_logits = model(u, seq, pos, neg)
+            u, seq, fseq, pos, neg = sampler.next_batch() # tuples to ndarray
+            u, seq, fseq, pos, neg = np.array(u), np.array(seq), np.array(fseq), np.array(pos), np.array(neg)
+            pos_logits, neg_logits, pos_logits_f = model(u, seq, fseq, pos, neg)
             pos_labels, neg_labels = torch.ones(pos_logits.shape, device=args.device), torch.zeros(neg_logits.shape, device=args.device)
             # print("\neye ball check raw_logits:"); print(pos_logits); print(neg_logits) # check pos_logits > 0, neg_logits < 0
             adam_optimizer.zero_grad()
             indices = np.where(pos != 0)
             loss = bce_criterion(pos_logits[indices], pos_labels[indices])
+            loss += bce_criterion(pos_logits_f[indices], pos_labels[indices])
             loss += bce_criterion(neg_logits[indices], neg_labels[indices])
             for param in model.item_emb.parameters(): loss += args.l2_emb * torch.norm(param)
             loss.backward()
