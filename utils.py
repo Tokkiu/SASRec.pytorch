@@ -203,6 +203,7 @@ def evaluate(model, dataset, args):
 # evaluate on val set
 def evaluate_valid(model, dataset, args):
     [train, valid, test, usernum, itemnum] = copy.deepcopy(dataset)
+    fea_train, fea_valid, fea_test, fea_num, f_dic = id2fea(dataset)
 
     NDCG = 0.0
     valid_user = 0.0
@@ -216,20 +217,27 @@ def evaluate_valid(model, dataset, args):
 
         seq = np.zeros([args.maxlen], dtype=np.int32)
         idx = args.maxlen - 1
-        for i in reversed(train[u]):
+
+        seq_f = np.zeros([args.maxlen], dtype=np.int32)
+        fea_r = list(reversed(fea_train[u]))
+        for ii, i in enumerate(reversed(train[u])):
             seq[idx] = i
+            seq_f[idx] = fea_r[ii]
+
             idx -= 1
             if idx == -1: break
 
         rated = set(train[u])
         rated.add(0)
         item_idx = [valid[u][0]]
+        fea_idx = [fea_valid[u][0]]
         for _ in range(100):
             t = np.random.randint(1, itemnum + 1)
             while t in rated: t = np.random.randint(1, itemnum + 1)
             item_idx.append(t)
+            fea_idx.append(f_dic[t])
 
-        predictions = -model.predict(*[np.array(l) for l in [[u], [seq], item_idx]])
+        predictions = -model.predict(*[np.array(l) for l in [[u], [seq], [seq_f], item_idx, fea_idx]])
         predictions = predictions[0]
 
         rank = predictions.argsort().argsort()[0].item()
