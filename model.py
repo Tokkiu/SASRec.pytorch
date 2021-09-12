@@ -37,7 +37,6 @@ class SASRec(torch.nn.Module):
         self.item_emb = torch.nn.Embedding(self.item_num+1, args.hidden_units, padding_idx=0)
         self.fea_emb = torch.nn.Embedding(self.fea_num+1, args.hidden_units, padding_idx=0)
         self.pos_emb = torch.nn.Embedding(args.maxlen, args.hidden_units) # TO IMPROVE
-        self.pos_emb_f = torch.nn.Embedding(args.maxlen, args.hidden_units) # TO IMPROVE
         self.emb_dropout = torch.nn.Dropout(p=args.dropout_rate)
 
         self.attention_layernorms = torch.nn.ModuleList() # to be Q for self-attention
@@ -46,13 +45,6 @@ class SASRec(torch.nn.Module):
         self.forward_layers = torch.nn.ModuleList()
 
         self.last_layernorm = torch.nn.LayerNorm(args.hidden_units, eps=1e-8)
-
-        self.attention_layernorms_f = torch.nn.ModuleList()  # to be Q for self-attention
-        self.attention_layers_f = torch.nn.ModuleList()
-        self.forward_layernorms_f = torch.nn.ModuleList()
-        self.forward_layers_f = torch.nn.ModuleList()
-
-        self.last_layernorm_f = torch.nn.LayerNorm(args.hidden_units, eps=1e-8)
 
         for _ in range(args.num_blocks):
             new_attn_layernorm = torch.nn.LayerNorm(args.hidden_units, eps=1e-8)
@@ -69,26 +61,20 @@ class SASRec(torch.nn.Module):
             new_fwd_layer = PointWiseFeedForward(args.hidden_units, args.dropout_rate)
             self.forward_layers.append(new_fwd_layer)
 
-        for _ in range(args.num_blocks):
-                new_attn_layernorm = torch.nn.LayerNorm(args.hidden_units, eps=1e-8)
-                self.attention_layernorms_f.append(new_attn_layernorm)
-
-                new_attn_layer = torch.nn.MultiheadAttention(args.hidden_units,
-                                                             args.num_heads,
-                                                             args.dropout_rate)
-                self.attention_layers_f.append(new_attn_layer)
-
-                new_fwd_layernorm = torch.nn.LayerNorm(args.hidden_units, eps=1e-8)
-                self.forward_layernorms_f.append(new_fwd_layernorm)
-
-                new_fwd_layer = PointWiseFeedForward(args.hidden_units, args.dropout_rate)
-                self.forward_layers_f.append(new_fwd_layer)
-
             # self.pos_sigmoid = torch.nn.Sigmoid()
             # self.neg_sigmoid = torch.nn.Sigmoid()
+        self.embed_dense_f = torch.nn.Linear(2*args.hidden_units, args.hidden_units)
 
-    def log2feats(self, log_seqs):
+
+    def log2feats(self, log_seqs, log_seqs_f):
         seqs = self.item_emb(torch.LongTensor(log_seqs).to(self.dev))
+        seqs_f = self.fea_emb(torch.LongTensor(log_seqs_f).to(self.dev))
+        seqs = torch.cat((seqs, seqs_f), 2)
+        seqs = self.embed_dense_f(seqs)
+
+
+
+
         seqs *= self.item_emb.embedding_dim ** 0.5
         positions = np.tile(np.array(range(log_seqs.shape[1])), [log_seqs.shape[0], 1])
         seqs += self.pos_emb(torch.LongTensor(positions).to(self.dev))
@@ -152,15 +138,13 @@ class SASRec(torch.nn.Module):
         return log_feats
 
     def forward(self, user_ids, log_seqs, log_seqs_f, pos_seqs, neg_seqs, pos_seqs_f): # for training
-        log_feats = self.log2feats(log_seqs) # user_ids hasn't been used yet
-        log_feats_f = self.log2feats_f(log_seqs_f) # user_ids hasn't been used yet
-
+        log_feats = self.log2feats(log_seqs, log_seqs_f) # user_ids hasn't been used yet
         pos_embs = self.item_emb(torch.LongTensor(pos_seqs).to(self.dev))
         pos_embs_f = self.fea_emb(torch.LongTensor(pos_seqs_f).to(self.dev))
         neg_embs = self.item_emb(torch.LongTensor(neg_seqs).to(self.dev))
 
         pos_logits = (log_feats * pos_embs).sum(dim=-1)
-        pos_logits_f = (log_feats_f * pos_embs_f).sum(dim=-1)
+        pos_logits_f = (log_feats * pos_embs_f).sum(dim=-1)
         neg_logits = (log_feats * neg_embs).sum(dim=-1)
 
         # pos_pred = self.pos_sigmoid(pos_logits)
@@ -169,18 +153,17 @@ class SASRec(torch.nn.Module):
         return pos_logits, neg_logits, pos_logits_f # pos_pred, neg_pred
 
     def predict(self, user_ids, log_seqs, log_seqs_f, item_indices, fea_indices): # for inference
-        log_feats = self.log2feats(log_seqs) # user_ids hasn't been used yet
-        log_feats_f = self.log2feats_f(log_seqs_f) # user_ids hasn't been used yet
+        log_feats = self.log2feats(log_seqs, log_seqs_f) # user_ids hasn't been used yet
 
         final_feat = log_feats[:, -1, :] # only use last QKV classifier, a waste
-        final_feat_f = log_feats_f[:, -1, :] # only use last QKV classifier, a waste
+        # final_feat_f = log_feats_f[:, -1, :] # only use last QKV classifier, a waste
 
         item_embs = self.item_emb(torch.LongTensor(item_indices).to(self.dev)) # (U, I, C)
-        fea_embs = self.fea_emb(torch.LongTensor(fea_indices).to(self.dev)) # (U, I, C)
+        # fea_embs = self.fea_emb(torch.LongTensor(fea_indices).to(self.dev)) # (U, I, C)
 
         logits = item_embs.matmul(final_feat.unsqueeze(-1)).squeeze(-1)
-        logits_f = fea_embs.matmul(final_feat_f.unsqueeze(-1)).squeeze(-1)
+        # logits_f = fea_embs.matmul(final_feat.unsqueeze(-1)).squeeze(-1)
 
         # preds = self.pos_sigmoid(logits) # rank same item list for different users
 
-        return logits + logits_f # preds # (U, I)
+        return logits # preds # (U, I)
