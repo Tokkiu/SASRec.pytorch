@@ -16,6 +16,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_dir', required=True)
     parser.add_argument('--batch_size', default=128, type=int)
     parser.add_argument('--lr', default=0.001, type=float)
+    parser.add_argument('--fea_ratio', default=0.1, type=float)
     parser.add_argument('--maxlen', default=50, type=int)
     parser.add_argument('--hidden_units', default=50, type=int)
     parser.add_argument('--num_blocks', default=2, type=int)
@@ -97,7 +98,7 @@ if __name__ == '__main__':
             indices = np.where(pos != 0)
             loss = bce_criterion(pos_logits[indices], pos_labels[indices])
             loss += bce_criterion(neg_logits[indices], neg_labels[indices])
-            floss = 0.1*bce_criterion(pos_logits_f[indices], pos_labels[indices])
+            floss = args.fea_ratio*bce_criterion(pos_logits_f[indices], pos_labels[indices])
             if epoch > 50:
                 loss += floss
             for param in model.item_emb.parameters(): loss += args.l2_emb * torch.norm(param)
