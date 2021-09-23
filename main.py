@@ -97,14 +97,15 @@ if __name__ == '__main__':
             indices = np.where(pos != 0)
             loss = bce_criterion(pos_logits[indices], pos_labels[indices])
             loss += 0.1*bce_criterion(pos_logits_f[indices], pos_labels[indices])
+            floss = bce_criterion(neg_logits[indices], neg_labels[indices])
             if epoch > 50:
-                loss += bce_criterion(neg_logits[indices], neg_labels[indices])
+                loss += floss
             for param in model.item_emb.parameters(): loss += args.l2_emb * torch.norm(param)
             loss.backward()
             adam_optimizer.step()
-            print("loss in epoch {} iteration {}: {}".format(epoch, step, loss.item())) # expected 0.4~0.6 after init few epochs
+            print("loss in epoch {} iteration {}: {}, feature loss {}".format(epoch, step, loss.item(), floss.item())) # expected 0.4~0.6 after init few epochs
 
-        if epoch % 1 == 0:
+        if epoch % 5 == 0:
             model.eval()
             t1 = time.time() - t0
             T += t1
